@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Démo &amp; test</title>
+  <!-- Styles intégrés -->
+  <style>
+    body { font-family: system-ui; margin: 0 auto; max-width: 40em; }
+    .alerte { color: #c0392b; border-left: 4px solid currentColor; }
+  </style>
+</head>
+<body>
+  <h1 class="titre" id="haut">Bonjour</h1>
+  <p class="alerte" hidden>Message d'alerte</p>
+  <button onclick="saluer()">Cliquer</button>
+  <script>
+    // Affiche un message
+    function saluer(nom = "monde") {
+      const n = document.querySelectorAll("p").length;
+      alert(`Bonjour ${nom}, ${n} paragraphes`);
+    }
+  </script>
+</body>
+</html>
