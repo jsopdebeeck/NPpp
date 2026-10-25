@@ -51,7 +51,7 @@ The language is detected from the file extension, well-known file names (`.zshrc
 ## Install
 
 ### Download
-Grab `NPpp.zip` from the [latest release](../../releases/latest), unzip it and move `NPpp.app` to `/Applications`.
+Grab `NPpp.zip` (Apple silicon, macOS 13+) from the [latest release](../../releases/latest), unzip it and move `NPpp.app` to `/Applications`.
 
 The app is not notarized by Apple, so macOS will block the first launch. Either right-click the app → **Open**, or run:
 
