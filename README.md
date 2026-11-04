@@ -16,6 +16,13 @@ It is a single, dependency-free Swift/AppKit app (~3,500 lines). No Electron, no
 - Native macOS tabs (⌘T new, ⌘W close, ⇧⌘T reopen closed tab, ⌃Tab next tab).
 - **Everything is restored on relaunch**: open tabs, cursor position, view mode — including *unsaved* changes and untitled tabs. Quitting never asks questions.
 - Files changed by another app (Dropbox, another editor, `git pull`…) are reloaded automatically; if you also have unsaved edits, you choose which version to keep.
+- **File → Open Recent** keeps your last 20 files across launches; files that no longer exist are greyed out.
+
+### Automatic saving
+- Files are saved in place 2 seconds after you stop typing, when a tab closes and on quit. Turn it off with **File → Automatic Saving** (*Sauvegarde automatique*); the save prompt on close then comes back.
+- Before overwriting, the previous version is copied to `~/Library/Application Support/NPpp/versions/`, at most once every 10 minutes per tab and always after an external change. These copies are never purged. **File → Show Previous Versions** (*Afficher les versions précédentes*) opens the folder.
+- NPpp never overwrites a newer version on disk and never recreates a file that was moved or deleted: the status bar shows what could not be saved, and the text stays in the session.
+- Untitled tabs have no file to write to: they stay in the session and still ask on close.
 
 ### Three views — ⌘1 / ⌘2 / ⌘3
 - **Text** — plain editor, monospaced, with light Markdown highlighting.
@@ -66,7 +73,7 @@ Requires macOS 13+ and the Swift toolchain (the Xcode **Command Line Tools** are
 git clone https://github.com/jsopdebeeck/NPpp.git
 cd NPpp
 ./build.sh           # builds dist/NPpp.app
-./build.sh install   # …and copies it to ~/Applications
+./build.sh install   # …and installs it in /Applications
 ```
 
 To make NPpp the default app for Markdown files: select a `.md` file in Finder → ⌘I → *Open with* → NPpp → *Change All…*
@@ -87,7 +94,7 @@ Sources/NPpp/
 ├── SyntaxDefinitions.swift   language grammars — add a language here
 ├── TextFile.swift            encodings, BOM and line-ending detection
 ├── PreviewTemplate.swift     preview HTML/CSS
-├── Session.swift             session file (~/Library/Application Support/NPpp)
+├── Session.swift             session, recent files, previous versions (~/Library/Application Support/NPpp)
 └── MainMenu.swift            menus and keyboard shortcuts
 ```
 

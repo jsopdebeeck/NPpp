@@ -7,7 +7,7 @@ Application native (Swift / AppKit), sans dépendance. Xcode n'est pas nécessai
 
 ```bash
 ./build.sh            # produit dist/NPpp.app
-./build.sh install    # copie aussi l'app dans ~/Applications
+./build.sh install    # installe aussi l'app dans /Applications
 ```
 
 ## Fonctions
@@ -17,6 +17,13 @@ Application native (Swift / AppKit), sans dépendance. Xcode n'est pas nécessai
 - Au lancement, NPpp rouvre les onglets de la session précédente, y compris les modifications non enregistrées et les onglets « Sans titre ».
 - Quitter (⌘Q) ne pose aucune question : tout est conservé.
 - Un fichier modifié par une autre application (Dropbox, autre éditeur) est rechargé automatiquement. Si vous avez aussi des modifications non enregistrées, NPpp vous demande quelle version garder.
+- Fichier > Ouvrir récent garde les 20 derniers fichiers d'un lancement à l'autre. Un fichier disparu est grisé.
+
+**Sauvegarde automatique**
+- Le fichier est enregistré 2 s après la dernière frappe, à la fermeture de l'onglet et à Quitter. Fichier > Sauvegarde automatique la désactive : la question à la fermeture revient alors.
+- Avant d'écraser, la version précédente est copiée dans `versions/`, au plus une fois toutes les 10 minutes par onglet et toujours après un changement venu de l'extérieur. Ces copies ne sont jamais purgées. Fichier > Afficher les versions précédentes ouvre le dossier.
+- NPpp n'écrase jamais une version plus récente sur le disque et ne recrée pas un fichier déplacé ou supprimé : la barre d'état indique ce qui n'a pas pu être enregistré, et le texte reste dans la session.
+- Un onglet « Sans titre » n'a pas de fichier où écrire : il reste dans la session et la question à la fermeture demeure.
 
 **Affichage** (⌘1, ⌘2, ⌘3)
 - Texte, côte à côte (avec défilement synchronisé) ou aperçu Markdown formaté.
@@ -86,3 +93,5 @@ Pour ajouter un langage : `Sources/NPpp/SyntaxDefinitions.swift`.
 
 - Code : `Sources/NPpp/`
 - Session : `~/Library/Application Support/NPpp/session.json`
+- Fichiers récents : `~/Library/Application Support/NPpp/recent.json`
+- Versions précédentes : `~/Library/Application Support/NPpp/versions/`
