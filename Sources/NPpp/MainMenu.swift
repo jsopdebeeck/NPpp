@@ -43,15 +43,23 @@ enum MainMenu {
             item("Quitter NPpp", #selector(NSApplication.terminate(_:)), "q"),
         ]))
 
+        // Sous-menu reconstruit à chaque ouverture (AppDelegate.menuNeedsUpdate).
+        let recent = menu("Ouvrir récent", [])
+        recent.submenu?.delegate = NSApp.delegate as? AppDelegate
+
         main.addItem(menu("Fichier", [
             item("Nouvel onglet", #selector(A.newTab(_:)), "t"),
             item("Nouveau", #selector(A.newTab(_:)), "n"),
             item("Ouvrir…", #selector(A.openDocument(_:)), "o"),
+            recent,
             item("Rouvrir l'onglet fermé", #selector(A.reopenClosedTab(_:)), "t", [.command, .shift]),
             sep,
             item("Fermer l'onglet", #selector(NSWindow.performClose(_:)), "w"),
             item("Enregistrer", #selector(E.saveDocument(_:)), "s"),
             item("Enregistrer sous…", #selector(E.saveDocumentAs(_:)), "s", [.command, .shift]),
+            sep,
+            item("Sauvegarde automatique", #selector(A.toggleAutosave(_:))),
+            item("Afficher les versions précédentes", #selector(E.revealVersions(_:))),
             sep,
             item("Afficher dans le Finder", #selector(E.revealInFinder(_:)), "r", [.command, .shift]),
         ]))

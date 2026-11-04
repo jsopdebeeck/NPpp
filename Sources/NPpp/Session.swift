@@ -39,3 +39,47 @@ enum SessionStore {
         try? data.write(to: file, options: .atomic)
     }
 }
+
+/// Historique des fichiers récents, du plus récent au plus ancien.
+enum RecentStore {
+    static let limit = 20
+    private static var file: URL { SessionStore.directory.appendingPathComponent("recent.json") }
+
+    static func load() -> [String] {
+        guard let data = try? Data(contentsOf: file) else { return [] }
+        return (try? JSONDecoder().decode([String].self, from: data)) ?? []
+    }
+
+    static func save(_ paths: [String]) {
+        guard let data = try? JSONEncoder().encode(paths) else { return }
+        try? data.write(to: file, options: .atomic)
+    }
+}
+
+/// Versions précédentes : copie du fichier sur le disque avant de l'écraser.
+/// L'arborescence d'origine est reproduite sous versions/ ; rien n'est purgé.
+enum VersionStore {
+    static var directory: URL { SessionStore.directory.appendingPathComponent("versions", isDirectory: true) }
+
+    static func folder(for url: URL) -> URL {
+        directory.appendingPathComponent(url.deletingLastPathComponent().path, isDirectory: true)
+    }
+
+    /// Vrai si la copie existe, ou s'il n'y a rien à copier.
+    static func backup(_ url: URL) -> Bool {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: url.path) else { return true }
+        let stamp = DateFormatter()
+        stamp.locale = Locale(identifier: "en_US_POSIX")
+        stamp.dateFormat = "yyyyMMdd-HHmmss"
+        let dest = folder(for: url).appendingPathComponent("\(url.lastPathComponent).\(stamp.string(from: Date())).bak")
+        if fm.fileExists(atPath: dest.path) { return true }
+        do {
+            try fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try fm.copyItem(at: url, to: dest)
+            return true
+        } catch {
+            return false
+        }
+    }
+}

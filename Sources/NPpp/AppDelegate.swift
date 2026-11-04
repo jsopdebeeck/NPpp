@@ -2,7 +2,7 @@ import AppKit
 
 @main
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     static func main() {
         let app = NSApplication.shared
         let delegate = AppDelegate()
@@ -32,11 +32,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var wraps: Bool { defaults.bool(forKey: "wraps") }
     var showInvisibles: Bool { defaults.bool(forKey: "showInvisibles") }
     var markdownMode: ViewMode { ViewMode(rawValue: defaults.string(forKey: "markdownMode") ?? "") ?? .preview }
+    var autosaveEnabled: Bool { defaults.bool(forKey: "autosave") }
 
     // MARK: Cycle de vie
 
     func applicationWillFinishLaunching(_ notification: Notification) {
-        defaults.register(defaults: ["fontSize": Double(Self.defaultFontSize), "wraps": true, "showInvisibles": false])
+        defaults.register(defaults: ["fontSize": Double(Self.defaultFontSize), "wraps": true, "showInvisibles": false, "autosave": true])
         NSWindow.allowsAutomaticWindowTabbing = true
         NSApp.mainMenu = MainMenu.build()
         PreviewTemplate.install()
@@ -74,8 +75,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         currentController?.checkDisk()
     }
 
-    /// Pas de question à la fermeture : tout (y compris le non-enregistré) est conservé dans la session.
+    /// Pas de question à la fermeture : ce qui n'a pas pu être écrit reste dans la session.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        controllers.filter(\.hasPendingAutosave).forEach { $0.autosave() }
         saveSessionNow()
         isTerminating = true
         return .terminateNow
@@ -134,6 +136,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let url = url.standardizedFileURL.resolvingSymlinksInPath()
         if let existing = controllers.first(where: { $0.fileURL?.standardizedFileURL.resolvingSymlinksInPath() == url }) {
             existing.window?.makeKeyAndOrderFront(nil)
+            noteRecent(url)
             return
         }
         let isMarkdown = EditorController.markdownExtensions.contains(url.pathExtension.lowercased())
@@ -154,7 +157,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             controllers.removeAll { $0 === blank }
             blank.window?.close()
         }
+        noteRecent(url)
+    }
+
+    // MARK: Fichiers récents
+
+    private lazy var recentPaths: [String] = RecentStore.load()
+
+    func noteRecent(_ url: URL) {
+        recentPaths.removeAll { $0 == url.path }
+        recentPaths.insert(url.path, at: 0)
+        recentPaths = Array(recentPaths.prefix(RecentStore.limit))
+        RecentStore.save(recentPaths)
         NSDocumentController.shared.noteNewRecentDocumentURL(url)
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        menu.removeAllItems()
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        for path in recentPaths {
+            let url = URL(fileURLWithPath: path)
+            var folder = url.deletingLastPathComponent().path
+            if folder.hasPrefix(home) { folder = "~" + folder.dropFirst(home.count) }
+            let i = NSMenuItem(title: "\(url.lastPathComponent)  —  \(folder)", action: #selector(openRecent(_:)), keyEquivalent: "")
+            i.representedObject = path
+            i.toolTip = path
+            menu.addItem(i)
+        }
+        if recentPaths.isEmpty {
+            menu.addItem(NSMenuItem(title: "Aucun fichier récent", action: nil, keyEquivalent: ""))
+        } else {
+            menu.addItem(.separator())
+            menu.addItem(NSMenuItem(title: "Effacer l'historique", action: #selector(clearRecent(_:)), keyEquivalent: ""))
+        }
+    }
+
+    @objc func openRecent(_ sender: NSMenuItem) {
+        guard let path = sender.representedObject as? String else { return }
+        open(url: URL(fileURLWithPath: path))
+    }
+
+    /// Vide la liste ; les fichiers eux-mêmes ne sont pas touchés.
+    @objc func clearRecent(_ sender: Any?) {
+        recentPaths = []
+        RecentStore.save([])
     }
 
     func controllerClosed(_ c: EditorController) {
@@ -238,9 +284,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func resetFont(_ sender: Any?) { fontSize = Self.defaultFontSize; refreshAll() }
     @objc func toggleWrap(_ sender: Any?) { defaults.set(!wraps, forKey: "wraps"); refreshAll() }
     @objc func toggleInvisibles(_ sender: Any?) { defaults.set(!showInvisibles, forKey: "showInvisibles"); refreshAll() }
+    @objc func toggleAutosave(_ sender: Any?) { defaults.set(!autosaveEnabled, forKey: "autosave") }
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         switch item.action {
+        case #selector(toggleAutosave(_:)): item.state = autosaveEnabled ? .on : .off
+        case #selector(openRecent(_:)):
+            // Fichier déplacé ou supprimé : grisé.
+            return (item.representedObject as? String).map { FileManager.default.fileExists(atPath: $0) } ?? false
         case #selector(toggleWrap(_:)): item.state = wraps ? .on : .off
         case #selector(toggleInvisibles(_:)): item.state = showInvisibles ? .on : .off
         case #selector(reopenClosedTab(_:)): return !closedTabs.isEmpty

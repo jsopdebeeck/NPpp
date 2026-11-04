@@ -488,6 +488,7 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
         parts.append(kind.name)
         parts.append(lineEnding.rawValue)
         parts.append(encoding.name)
+        if let autosaveIssue { parts.append("Non sauvegardé : \(autosaveIssue)") }
         statusLabel.stringValue = parts.joined(separator: "     ")
     }
 
@@ -505,6 +506,7 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
         refreshWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: work)
         app.scheduleSave()
+        scheduleAutosave()
     }
 
     func textViewDidChangeSelection(_ notification: Notification) {
@@ -532,7 +534,89 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
     @discardableResult
     func save() -> Bool {
         guard let url else { return saveAs() }
+        _ = keepVersion(of: url)
         return write(to: url)
+    }
+
+    // MARK: - Sauvegarde automatique
+
+    private static let autosaveDelay: TimeInterval = 2
+    /// Au plus une version précédente par tranche de 10 minutes d'édition.
+    private static let versionInterval: TimeInterval = 600
+
+    private var autosaveWork: DispatchWorkItem?
+    private var lastVersionDate: Date?
+    private var autosaveIssue: String? { didSet { if autosaveIssue != oldValue { updateStatus() } } }
+
+    var hasPendingAutosave: Bool { autosaveWork != nil }
+
+    /// Le fichier a changé sur le disque depuis la dernière lecture ou écriture par NPpp.
+    private var diskIsNewer: Bool {
+        guard let url, let known = fileDate, let date = TextFile.modificationDate(url) else { return false }
+        return date.timeIntervalSince(known) > 0.5
+    }
+
+    private func scheduleAutosave() {
+        autosaveWork?.cancel()
+        autosaveWork = nil
+        guard url != nil, app.autosaveEnabled else { return }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            if self.textView.hasMarkedText() { self.scheduleAutosave(); return } // accent en cours
+            if !self.autosave(), self.diskIsNewer { self.checkDisk() }
+        }
+        autosaveWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.autosaveDelay, execute: work)
+    }
+
+    /// Écrit dans le fichier, sans aucune alerte. Vrai si le fichier est à jour au retour.
+    /// N'écrit jamais par-dessus une version plus récente ni dans un fichier disparu.
+    @discardableResult
+    func autosave() -> Bool {
+        autosaveWork?.cancel()
+        autosaveWork = nil
+        guard isDirty else { autosaveIssue = nil; return true }
+        guard let url, app.autosaveEnabled else { return false }
+        guard TextFile.modificationDate(url) != nil else { autosaveIssue = "fichier introuvable"; return false }
+        if diskIsNewer {
+            guard (try? TextFile.read(url))?.text == savedText else {
+                autosaveIssue = "fichier modifié sur le disque"
+                return false
+            }
+            fileDate = TextFile.modificationDate(url) // même contenu : date touchée par la synchronisation
+        }
+        guard let data = TextFile(text: text, lineEnding: lineEnding, encoding: encoding).encoded() else {
+            autosaveIssue = "caractères impossibles en \(encoding.name)"
+            return false
+        }
+        guard keepVersion(of: url) else { autosaveIssue = "copie de la version précédente impossible"; return false }
+        do {
+            try data.write(to: url, options: .atomic)
+        } catch {
+            autosaveIssue = "écriture impossible"
+            return false
+        }
+        didWrite(url)
+        return true
+    }
+
+    private func keepVersion(of url: URL) -> Bool {
+        if !diskIsNewer, let last = lastVersionDate, Date().timeIntervalSince(last) < Self.versionInterval { return true }
+        guard VersionStore.backup(url) else { return false }
+        lastVersionDate = Date()
+        return true
+    }
+
+    @objc func revealVersions(_ sender: Any?) {
+        guard let url else { return }
+        let folder = VersionStore.folder(for: url)
+        if FileManager.default.fileExists(atPath: folder.path) {
+            NSWorkspace.shared.activateFileViewerSelecting([folder])
+        } else {
+            let a = NSAlert()
+            a.messageText = "Aucune version précédente pour « \(displayName) »."
+            a.runModal()
+        }
     }
 
     @discardableResult
@@ -545,10 +629,12 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
         guard panel.runModal() == .OK, let dest = panel.url else { return false }
         guard write(to: dest) else { return false }
         url = dest
+        lastVersionDate = nil
         highlight(force: true)
         pushPreview()
         refreshChrome()
         app.scheduleSave()
+        app.noteRecent(dest.standardizedFileURL.resolvingSymlinksInPath())
         return true
     }
 
@@ -570,13 +656,18 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
             NSAlert(error: error).runModal()
             return false
         }
+        didWrite(dest)
+        return true
+    }
+
+    private func didWrite(_ dest: URL) {
         savedText = text
         savedLineEnding = lineEnding
         savedEncoding = encoding
         fileDate = TextFile.modificationDate(dest)
+        autosaveIssue = nil
         refreshChrome()
         app.scheduleSave()
-        return true
     }
 
     /// Recharge si le fichier a changé sur le disque (Dropbox, autre éditeur…).
@@ -585,6 +676,7 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
         guard let known = fileDate else { fileDate = date; return }
         guard date.timeIntervalSince(known) > 0.5 else { return }
         fileDate = date
+        lastVersionDate = nil // la version venue de l'extérieur doit être copiée avant d'être écrasée
         guard let disk = try? TextFile.read(url) else { return }
         if disk.text == text {
             savedText = disk.text
@@ -597,7 +689,7 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
             a.informativeText = "Vous avez aussi des modifications non enregistrées dans NPpp."
             a.addButton(withTitle: "Garder ma version")
             a.addButton(withTitle: "Recharger depuis le disque")
-            guard a.runModal() == .alertSecondButtonReturn else { return }
+            guard a.runModal() == .alertSecondButtonReturn else { scheduleAutosave(); return }
         }
         load(disk)
     }
@@ -611,6 +703,7 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
         savedEncoding = file.encoding
         lineEnding = file.lineEnding
         encoding = file.encoding
+        autosaveIssue = nil
         highlight(force: true)
         let len = (text as NSString).length
         textView.setSelectedRange(NSRange(location: min(sel.location, len), length: 0))
@@ -630,12 +723,14 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
         guard let le = sender.representedObject as? String, let new = LineEnding(rawValue: le) else { return }
         lineEnding = new
         app.scheduleSave()
+        scheduleAutosave()
     }
 
     @objc func setEncoding(_ sender: NSMenuItem) {
         guard let i = sender.representedObject as? Int else { return }
         encoding = TextEncoding.all[i]
         app.scheduleSave()
+        scheduleAutosave()
     }
 
     /// Relit le fichier en forçant un encodage (accents mal décodés).
@@ -663,6 +758,7 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         if app.isTerminating || !isDirty { return true }
+        if url != nil, autosave() { return true }
         let a = NSAlert()
         a.messageText = "Enregistrer les modifications de « \(displayName) » ?"
         a.informativeText = "Sinon, elles seront abandonnées. ⇧⌘T rouvre l'onglet fermé."
@@ -677,6 +773,8 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
     }
 
     func windowWillClose(_ notification: Notification) {
+        autosaveWork?.cancel()
+        autosaveWork = nil
         NotificationCenter.default.removeObserver(self)
         if !app.isTerminating { app.controllerClosed(self) }
     }
@@ -703,7 +801,7 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
         case #selector(setLanguage(_:)):
             let id = item.representedObject as? String
             item.state = id == "auto" ? (languageOverride == nil ? .on : .off) : (id == kind.id ? .on : .off)
-        case #selector(reopenWithEncoding(_:)), #selector(revealInFinder(_:)):
+        case #selector(reopenWithEncoding(_:)), #selector(revealInFinder(_:)), #selector(revealVersions(_:)):
             return url != nil
         default: break
         }

@@ -119,7 +119,9 @@ struct TextFile {
         return data
     }
 
+    /// Lue sur le disque à chaque appel : `URL.resourceValues` met la valeur en cache
+    /// pendant le tour de boucle, ce qui donnait une date périmée juste après une écriture.
     static func modificationDate(_ url: URL) -> Date? {
-        (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+        (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
     }
 }
