@@ -25,6 +25,12 @@ Application native (Swift / AppKit), sans dépendance. Xcode n'est pas nécessai
 - NPpp n'écrase jamais une version plus récente sur le disque et ne recrée pas un fichier déplacé ou supprimé : la barre d'état indique ce qui n'a pas pu être enregistré, et le texte reste dans la session.
 - Un onglet « Sans titre » n'a pas de fichier où écrire : il reste dans la session et la question à la fermeture demeure.
 
+**Impression et PDF**
+- Fichier > Imprimer (⌘P) ouvre le panneau d'impression de macOS, avec aperçu. Fichier > Exporter au format PDF (⌥⌘P) écrit directement un PDF paginé.
+- Le rendu est toujours en thème clair, en A4 avec des marges étroites, et conserve les blocs de code, le surlignage et les encadrés.
+- Ce qui est imprimé suit la présentation : Markdown mis en forme en aperçu ou côte à côte, source en mode texte. Le code est coloré dans les deux cas.
+- Un PDF remplacé est d'abord copié dans les versions précédentes.
+
 **Affichage** (⌘1, ⌘2, ⌘3)
 - Texte, côte à côte (avec défilement synchronisé) ou aperçu Markdown formaté.
 - L'aperçu gère les titres, listes et cases à cocher, tableaux, citations, callouts `> [!NOTE]`, code, liens, `[[wikilinks]]`, images relatives, front matter YAML, `==surlignage==` et le mode sombre.

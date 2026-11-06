@@ -24,6 +24,12 @@ It is a single, dependency-free Swift/AppKit app (~3,500 lines). No Electron, no
 - NPpp never overwrites a newer version on disk and never recreates a file that was moved or deleted: the status bar shows what could not be saved, and the text stays in the session.
 - Untitled tabs have no file to write to: they stay in the session and still ask on close.
 
+### Printing & PDF
+- **File → Print** (⌘P) opens the standard macOS print panel with a preview; **File → Export as PDF** (⌥⌘P, *Exporter au format PDF*) writes a paginated PDF directly.
+- Output always uses the light theme, A4 with narrow margins, and keeps code blocks, highlights and callouts.
+- What is printed follows the current view: rendered Markdown in Preview or Side by side, source in Text mode. Code is syntax-highlighted either way.
+- Replacing an existing PDF first copies the old one to the previous versions folder.
+
 ### Three views — ⌘1 / ⌘2 / ⌘3
 - **Text** — plain editor, monospaced, with light Markdown highlighting.
 - **Side by side** — editor and preview with synchronized scrolling.
@@ -93,6 +99,7 @@ Sources/NPpp/
 ├── Syntax.swift              generic regex-based highlighting engine
 ├── SyntaxDefinitions.swift   language grammars — add a language here
 ├── TextFile.swift            encodings, BOM and line-ending detection
+├── Print.swift               printing and PDF export
 ├── PreviewTemplate.swift     preview HTML/CSS
 ├── Session.swift             session, recent files, previous versions (~/Library/Application Support/NPpp)
 └── MainMenu.swift            menus and keyboard shortcuts
