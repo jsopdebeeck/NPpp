@@ -1,5 +1,6 @@
 import AppKit
 import WebKit
+import UniformTypeIdentifiers
 
 enum ViewMode: String, Codable { case text, split, preview }
 
@@ -346,17 +347,62 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
 
     private func pushPreview() {
         guard mode != .text, let webView, previewLoaded else { return }
-        let body: String
-        switch kind {
-        case .markdown: body = MarkdownRenderer.html(text)
-        case .code(let lang): body = "<pre class=\"code\"><code>\(Syntax.html(text, lang))</code></pre>"
-        case .plain: body = "<pre class=\"plain\">\(esc(text))</pre>"
-        }
-        let base = url?.deletingLastPathComponent().absoluteString ?? ""
+        let body = htmlBody(renderMarkdown: true)
+        let base = baseHref
         guard let data = try? JSONSerialization.data(withJSONObject: [body, base]),
               let json = String(data: data, encoding: .utf8) else { return }
         webView.evaluateJavaScript("setContent.apply(null, \(json))") { [weak self] _, _ in
             if self?.mode == .split { self?.syncScroll() }
+        }
+    }
+
+    /// HTML du document : Markdown rendu, code coloré ou texte brut.
+    /// Avec `renderMarkdown` à faux, un Markdown est montré comme source.
+    private func htmlBody(renderMarkdown: Bool) -> String {
+        switch kind {
+        case .markdown where renderMarkdown: return MarkdownRenderer.html(text)
+        case .code(let lang): return "<pre class=\"code\"><code>\(Syntax.html(text, lang))</code></pre>"
+        default: return "<pre class=\"plain\">\(esc(text))</pre>"
+        }
+    }
+
+    private var baseHref: String { url?.deletingLastPathComponent().absoluteString ?? "" }
+
+    // MARK: - Impression et PDF
+
+    private var printing = false
+
+    /// Ce qui est imprimé suit la présentation : Markdown rendu en aperçu ou côte à côte, source en mode texte.
+    private var printBody: String { htmlBody(renderMarkdown: mode != .text) }
+
+    @objc func printDocument(_ sender: Any?) {
+        guard !printing, let window else { return }
+        printing = true
+        PrintJob.run(body: printBody, base: baseHref, title: displayName, destination: nil, window: window) { [weak self] _ in
+            self?.printing = false
+        }
+    }
+
+    @objc func exportPDF(_ sender: Any?) {
+        guard !printing, let window else { return }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.pdf]
+        panel.nameFieldStringValue = ((url?.deletingPathExtension().lastPathComponent) ?? untitledName) + ".pdf"
+        panel.directoryURL = url?.deletingLastPathComponent()
+        panel.canCreateDirectories = true
+        panel.isExtensionHidden = false
+        guard panel.runModal() == .OK, let dest = panel.url else { return }
+        // Un PDF remplacé est d'abord copié dans les versions précédentes.
+        guard VersionStore.backup(dest) else {
+            let a = NSAlert()
+            a.messageText = "Impossible de copier l'ancien « \(dest.lastPathComponent) » avant de le remplacer."
+            a.runModal()
+            return
+        }
+        printing = true
+        PrintJob.run(body: printBody, base: baseHref, title: displayName, destination: dest, window: window) { [weak self] ok in
+            self?.printing = false
+            if !ok { NSSound.beep() }
         }
     }
 
@@ -801,6 +847,8 @@ final class EditorController: NSWindowController, NSWindowDelegate, NSTextViewDe
         case #selector(setLanguage(_:)):
             let id = item.representedObject as? String
             item.state = id == "auto" ? (languageOverride == nil ? .on : .off) : (id == kind.id ? .on : .off)
+        case #selector(printDocument(_:)), #selector(exportPDF(_:)):
+            return !printing
         case #selector(reopenWithEncoding(_:)), #selector(revealInFinder(_:)), #selector(revealVersions(_:)):
             return url != nil
         default: break

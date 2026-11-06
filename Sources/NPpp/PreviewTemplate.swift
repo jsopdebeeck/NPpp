@@ -76,6 +76,14 @@ tbody tr:nth-child(2n) { background: var(--row); }
 .callout-important { --c: #8250df; }
 .callout-warning, .callout-caution, .callout-attention { --c: #bf8700; }
 .callout-danger, .callout-error, .callout-bug { --c: #cf222e; }
+@media print {
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; } /* fonds du code, surlignage, encadrés */
+  body { padding: 0; font-size: 11pt; }
+  #c { max-width: none; }
+  pre, pre.code, pre.plain { white-space: pre-wrap; overflow: visible; }
+  h1, h2, h3, h4 { break-after: avoid; }
+  table, img, .callout { break-inside: avoid; }
+}
 ::selection { background: color-mix(in srgb, var(--accent) 30%, transparent); }
 </style>
 </head>

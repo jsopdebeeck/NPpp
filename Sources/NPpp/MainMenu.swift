@@ -61,6 +61,9 @@ enum MainMenu {
             item("Sauvegarde automatique", #selector(A.toggleAutosave(_:))),
             item("Afficher les versions précédentes", #selector(E.revealVersions(_:))),
             sep,
+            item("Exporter au format PDF…", #selector(E.exportPDF(_:)), "p", [.command, .option]),
+            item("Imprimer…", #selector(E.printDocument(_:)), "p"),
+            sep,
             item("Afficher dans le Finder", #selector(E.revealInFinder(_:)), "r", [.command, .shift]),
         ]))
 
